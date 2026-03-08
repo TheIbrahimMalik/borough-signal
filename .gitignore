@@ -1,0 +1,10 @@
+.env
+apps/api/.env
+apps/web/.env
+__pycache__/
+*.pyc
+node_modules/
+.venv/
+surreal-data/
+history.txt
+db/boroughsignal-backup.surql
