@@ -6,6 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 BoroughSignal — synthetic-audience copilot for London planning proposals. A LangGraph pipeline scores how demographic segments react to a proposal, persists runs to SurrealDB, and serves results via FastAPI to a Next.js frontend.
 
+## Sprint objective
+
+This repository is being upgraded from a hackathon prototype into BoroughSignal v2 in a time-boxed delivery sprint ending Monday.
+
+Primary objective:
+- ship one credible, presentable, defensible vertical slice
+
+Optimise for:
+- demoability
+- README quality
+- deployment reliability
+- clear architecture
+- maintainability
+- honest trade-offs
+
+Do not optimise for:
+- broad feature scope
+- speculative future platform work
+- infrastructure complexity
+- architecture theatre
+
 ## Repo layout
 
 - `apps/api/` — FastAPI + LangGraph backend (Python 3.12). Entry: `main.py`. Pipeline in `graph/workflow.py`, scoring in `services/simulation.py`.
@@ -19,6 +40,9 @@ BoroughSignal — synthetic-audience copilot for London planning proposals. A La
 These project rules take precedence over generic defaults. Apply them on every task.
 
 - **README-first**: update or propose docs/README changes before major implementation.
+- **Audit first**: before major implementation, identify what to keep, cut, refactor, and defer.
+- **Freeze scope before parallel work**: do not start multiple implementation tracks until the v2 scope and interfaces are agreed.
+- **Prefer controlled refactor over rewrite**: preserve working code where possible and only replace code when it materially improves clarity, maintainability, or deployment success.
 - **Python-centric backend**: backend logic should be idiomatic, typed Python where practical.
 - **SOLID design**: prefer small single-purpose modules, explicit interfaces, dependency injection where useful, and clear boundaries between ingestion, validation, storage, API, and presentation.
 - **Collaboration-first**: behave like a careful peer reviewer. Explain trade-offs, flag risks, and avoid large unreviewed rewrites.
@@ -28,7 +52,21 @@ These project rules take precedence over generic defaults. Apply them on every t
 - **Git safety**: do not commit, reset, clean, push, or restructure repos without explicit approval.
 - **Frontend caution**: `apps/web` has a nested `.git` directory; do not commit or restructure frontend files without asking.
 - **Senior review standard**: optimise for readable, maintainable, explainable code over cleverness or hackathon-style shortcuts.
-- **Agentic future**: keep the architecture open to future MCP / persona-simulation integration, but do not over-engineer before the ingestion engine is stable.
+- **Deployment matters**: prefer simple deployment choices and cut scope before risking deployment reliability.
+- **One demo path**: prioritise the single strongest end-to-end flow that can be deployed and explained clearly.
+- **Future-facing but grounded**: keep boundaries clean so future integrations remain possible, but do not add abstractions, MCP integration points, or agent infrastructure unless they are needed for the current sprint scope.
+
+## Working style for this sprint
+
+- Start with repo audit and scope control before major implementation.
+- Do not start parallel implementation until the v2 scope and interfaces are agreed.
+- If parallel work is used, keep it to at most 3 lanes:
+  - backend/core flow
+  - frontend/demo polish
+  - docs/deployment
+- Prefer one-repo execution first; introduce git worktrees only when tasks are clearly separable.
+- Use Claude for audit, planning, focused implementation, and PR-style review.
+- Do not add skills, hooks, MCPs, or extra workflow automation unless they save immediate time on the locked sprint scope.
 
 ## Dev commands
 

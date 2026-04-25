@@ -1,5 +1,8 @@
 # Development Backlog
 
+> This backlog is a holding area for candidate work. It is not the sprint plan.
+> Current execution should follow the locked BoroughSignal v2 scope, architecture, and priorities decided after repo audit.
+
 ## High priority
 - Add backend dependency manifest (`requirements.txt` or `pyproject.toml`) instead of relying only on `.venv`.
 - Add backend tests for ingestion, validation, simulation, and API behaviour.
