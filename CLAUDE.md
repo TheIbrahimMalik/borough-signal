@@ -12,7 +12,7 @@ BoroughSignal — synthetic-audience copilot for London planning proposals. A La
 - `apps/web/` — Next.js 16 + React 19 + Tailwind 4 frontend. Single-page UI in `src/app/page.tsx`, API client in `src/lib/api.ts`. **Has its own nested `.git/` — see Gotchas.**
 - `db/` — `schema.surql`, `seed.surql`. No migration tool; schema/seed are applied manually.
 - `scripts/dev-tmux.sh` — opens a 4-window tmux session for dev.
-- `docs/` — pitch, demo script, judge Q&A.
+- `docs/` — pitch, demo script, judge Q&A, and development backlog.
 
 ## Electric Twin / Gleb Principles
 
