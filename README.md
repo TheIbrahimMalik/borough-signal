@@ -140,7 +140,9 @@ The app generates an improved proposal version and reruns the simulation to show
 
 ```bash
 cd apps/api
+python3 -m venv .venv                  # first time only
 source .venv/bin/activate
+pip install -r requirements.txt        # first time only
 python3 -m uvicorn main:app --reload --port 8001
 ```
 
@@ -148,8 +150,11 @@ python3 -m uvicorn main:app --reload --port 8001
 
 ```bash
 cd apps/web
+npm install                            # first time only
 npm run dev
 ```
+
+The frontend reads `NEXT_PUBLIC_API_BASE_URL` (with a fallback to `http://127.0.0.1:8001`). To point at a different backend, copy `apps/web/.env.example` to `apps/web/.env.local` and edit it.
 
 ### Start SurrealDB
 

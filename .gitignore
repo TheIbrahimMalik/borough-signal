@@ -4,6 +4,7 @@ apps/web/.env
 __pycache__/
 *.pyc
 node_modules/
+.next/
 .venv/
 surreal-data/
 history.txt
