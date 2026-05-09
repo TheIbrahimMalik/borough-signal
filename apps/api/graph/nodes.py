@@ -1,15 +1,15 @@
 from langsmith import traceable
 
 from graph.state import BoroughSignalState
+from services.features import extract_features
+from services.geography import detect_place_mismatch
+from services.issues import detect_issues
 from services.persistence import persist_simulation_run
-from services.simulation import (
-    build_recommendation,
+from services.recommendations import build_recommendation
+from services.scoring import (
     build_segment_rationale,
     compute_run_confidence,
     compute_segment_score,
-    detect_issues,
-    detect_place_mismatch,
-    extract_features,
     get_area_issue_modifiers,
     score_to_stance,
 )
