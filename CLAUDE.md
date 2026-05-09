@@ -29,7 +29,7 @@ Do not optimise for:
 
 ## Repo layout
 
-- `apps/api/` — FastAPI + LangGraph backend (Python 3.12). Entry: `main.py`. Pipeline in `graph/workflow.py`, scoring in `services/simulation.py`.
+- `apps/api/` — FastAPI + LangGraph backend (Python 3.12). Entry: `main.py`. Pipeline in `graph/workflow.py`; scoring/parse logic split across `services/{features,issues,geography,scoring,recommendations}.py`.
 - `apps/web/` — Next.js 16 + React 19 + Tailwind 4 frontend. Single-page UI in `src/app/page.tsx`, API client in `src/lib/api.ts`. **Has its own nested `.git/` — see Gotchas.**
 - `db/` — `schema.surql`, `seed.surql`. No migration tool; schema/seed are applied manually.
 - `scripts/dev-tmux.sh` — opens a 4-window tmux session for dev.
@@ -99,14 +99,14 @@ Backend reads `apps/api/.env`; root `.env` is for shared/example config.
 
 ## Pipeline shape
 
-Linear LangGraph in `apps/api/graph/workflow.py`: `parse_proposal → retrieve_context → simulate_segments → persist_run`. Each node is `@traceable` for LangSmith. Mutate `state.py` (TypedDict) — don't change node signatures without updating the graph builder. Scoring modifiers live in `SEGMENT_FEATURE_MODIFIERS` and `PLACE_TO_BOROUGH` dicts in `services/simulation.py`; treat these as data, not logic.
+Linear LangGraph in `apps/api/graph/workflow.py`: `parse_proposal → retrieve_context → simulate_segments → persist_run`. Each node is `@traceable` for LangSmith. Mutate `state.py` (TypedDict) — don't change node signatures without updating the graph builder. Scoring modifiers live in `SEGMENT_FEATURE_MODIFIERS` in `services/scoring.py` and `PLACE_TO_BOROUGH` in `services/geography.py`; treat these as data, not logic.
 
 ## Gotchas
 
 - **`apps/web/.git/` is a nested repo, not a submodule.** Frontend file changes appear in the main repo as `m apps/web` but are actually tracked in the inner repo. Never run git operations against frontend files without asking which repo to target.
-- **No Python dep manifest.** `apps/api/` has no `requirements.txt` or `pyproject.toml` — deps are only in `.venv/`. When adding/upgrading a Python package, flag this and offer to generate a manifest (don't blindly `pip freeze`).
-- **No backend tests yet.** Add tests alongside backend logic changes per the testing-discipline rule above.
+- Backend runtime deps are listed in apps/api/requirements.txt; dev/test deps are in apps/api/requirements-dev.txt.
+- Backend tests now cover the extracted pure-logic modules; there are still no DB-backed integration tests.
 - **No backend linter/formatter configured.** If introducing one, propose first (ruff is the obvious default) — don't reformat the tree silently.
-- **Demo data is hardcoded.** 5 boroughs / 6 segments / ~50 evidence rows in `db/seed.surql`; place→borough mapping is a static dict in `simulation.py`. Recreating SurrealDB state means re-applying `schema.surql` then `seed.surql`.
+- **Demo data is hardcoded.** 5 boroughs / 6 segments / ~50 evidence rows in `db/seed.surql`; place→borough mapping is a static dict in `services/geography.py`. Recreating SurrealDB state means re-applying `schema.surql` then `seed.surql`.
 - **Synchronous `/simulate` calls.** The frontend blocks until the LangGraph run completes (seconds). No background queue.
 - **React Compiler is on** (`next.config.ts: reactCompiler: true`). Don't add manual `useMemo`/`useCallback` purely for memoization.
