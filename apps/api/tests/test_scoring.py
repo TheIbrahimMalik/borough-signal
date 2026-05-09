@@ -4,16 +4,7 @@ from services.scoring import (
     get_area_issue_modifiers,
     score_to_stance,
 )
-
-
-def _empty_features() -> dict:
-    return {k: False for k in [
-        "new_homes", "affordable_housing", "quantified_affordability",
-        "station_access", "transport_mitigation", "limited_parking",
-        "retail_space", "green_space_loss", "green_space_gain",
-        "public_realm_improvements", "safety_measures",
-        "local_character_risk", "heritage_sensitive_design",
-    ]} | {"unit_count": None}
+from tests._helpers import empty_features
 
 
 def test_score_to_stance_thresholds():
@@ -38,7 +29,7 @@ def test_get_area_issue_modifiers_profile_signals():
 
 
 def test_compute_segment_score_combines_priorities_and_modifiers():
-    features = _empty_features()
+    features = empty_features()
     features["new_homes"] = True
     features["affordable_housing"] = True
     features["station_access"] = True
@@ -58,7 +49,7 @@ def test_compute_segment_score_combines_priorities_and_modifiers():
 
 
 def test_compute_run_confidence_geography_warning_penalty_and_clamp():
-    features = _empty_features()
+    features = empty_features()
 
     # No issues, no features, no evidence -> base 0.35; clamped to 0.20 floor
     # once the geography warning subtracts 0.08.
@@ -80,3 +71,22 @@ def test_compute_run_confidence_geography_warning_penalty_and_clamp():
         geography_warning=None,
     )
     assert high == 0.95
+
+
+def test_compute_run_confidence_unclamped_formula():
+    # Pin the per-component coefficients with inputs that land strictly inside
+    # the (0.20, 0.95) clamp range, so the asserted value reflects the formula
+    # rather than saturation:
+    #   0.35 base + 2 * 0.08 issues + 3 * 0.04 features + 5 * 0.03 evidence = 0.78
+    features = empty_features()
+    features["new_homes"] = True
+    features["affordable_housing"] = True
+    features["station_access"] = True
+
+    confidence = compute_run_confidence(
+        detected_issues=["affordability", "transport"],
+        features=features,
+        evidence_count=5,
+        geography_warning=None,
+    )
+    assert confidence == 0.78
