@@ -133,10 +133,60 @@ The app generates an improved proposal version and reruns the simulation to show
 - Python 3
 - Node.js / npm
 - Docker
-- SurrealDB CLI
 - LangSmith account and API key
 
-### Start the Backend
+### 1. Start SurrealDB
+
+From the repo root:
+
+```bash
+mkdir -p surreal-data
+sudo docker run --rm --pull always --name surrealdb \
+  -p 8000:8000 \
+  --user $(id -u) \
+  -v "$(pwd)/surreal-data:/mydata" \
+  -v "$(pwd)/db:/db:ro" \
+  surrealdb/surrealdb:latest \
+  start --log info --user root --pass root rocksdb:/mydata/boroughsignal.db
+```
+
+The `mkdir -p surreal-data` ensures the mounted data directory exists and is writable when the container runs as the current user (`--user $(id -u)`).
+
+Leave this running in its own terminal. The extra `-v "$(pwd)/db:/db:ro"` mount makes `db/schema.surql` and `db/seed.surql` available to the in-container CLI in step 2.
+
+### 2. Apply schema and seed (first time, or after wiping `surreal-data/`)
+
+With the SurrealDB container running, from the repo root:
+
+```bash
+sudo docker exec surrealdb /surreal import \
+  --endpoint http://localhost:8000 \
+  --username root --password root \
+  --namespace boroughsignal --database main \
+  /db/schema.surql
+
+sudo docker exec surrealdb /surreal import \
+  --endpoint http://localhost:8000 \
+  --username root --password root \
+  --namespace boroughsignal --database main \
+  /db/seed.surql
+```
+
+To start over with a clean database, stop the SurrealDB container (Ctrl-C in its terminal) and remove the on-disk data directory before redoing steps 1 and 2:
+
+```bash
+rm -rf surreal-data/
+```
+
+### 3. Configure backend environment
+
+```bash
+cp apps/api/.env.example apps/api/.env
+```
+
+Then edit `apps/api/.env` and fill in `LANGSMITH_API_KEY`. The defaults match the SurrealDB Docker command above.
+
+### 4. Start the Backend
 
 ```bash
 cd apps/api
@@ -146,7 +196,9 @@ pip install -r requirements.txt        # first time only
 python3 -m uvicorn main:app --reload --port 8001
 ```
 
-### Start the Frontend
+Smoke check: `curl http://127.0.0.1:8001/health` should return `{"status":"ok"}`, and `curl http://127.0.0.1:8001/lookups/bootstrap` should return non-empty boroughs and segments once the seed step above has been applied.
+
+### 5. Start the Frontend
 
 ```bash
 cd apps/web
@@ -156,32 +208,20 @@ npm run dev
 
 The frontend reads `NEXT_PUBLIC_API_BASE_URL` (with a fallback to `http://127.0.0.1:8001`). To point at a different backend, copy `apps/web/.env.example` to `apps/web/.env.local` and edit it.
 
-### Start SurrealDB
+### Tests and checks
 
-From the repo root:
+Backend tests (from `apps/api/` with the venv active):
 
 ```bash
-sudo docker run --rm --pull always --name surrealdb \
-  -p 8000:8000 \
-  --user $(id -u) \
-  -v "$(pwd)/surreal-data:/mydata" \
-  surrealdb/surrealdb:latest \
-  start --log info --user root --pass root rocksdb:/mydata/boroughsignal.db
+pip install -r requirements-dev.txt    # first time only
+python -m pytest tests/
 ```
 
-### Environment Variables
+Frontend lint and production build (from `apps/web/`):
 
-The API uses a `.env` file at `apps/api/.env`:
-
-```
-LANGSMITH_TRACING=true
-LANGSMITH_API_KEY=...
-LANGSMITH_PROJECT=boroughsignal
-SURREALDB_URL=ws://localhost:8000
-SURREALDB_USERNAME=root
-SURREALDB_PASSWORD=root
-SURREALDB_NAMESPACE=boroughsignal
-SURREALDB_DATABASE=main
+```bash
+npm run lint
+npm run build
 ```
 
 ---
