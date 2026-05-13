@@ -93,7 +93,7 @@ Full dev session: `./scripts/dev-tmux.sh`.
 
 ## Environment
 
-Required env vars (see `.env.example`): `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT=boroughsignal`, `SURREALDB_URL=ws://localhost:8000/rpc`, `SURREALDB_USERNAME`, `SURREALDB_PASSWORD`, `SURREALDB_NAMESPACE=boroughsignal`, `SURREALDB_DATABASE=main`.
+Required env vars (see `.env.example`): `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT=boroughsignal`, `SURREALDB_URL=ws://localhost:8000`, `SURREALDB_USERNAME`, `SURREALDB_PASSWORD`, `SURREALDB_NAMESPACE=boroughsignal`, `SURREALDB_DATABASE=main`.
 
 Backend reads `apps/api/.env`; root `.env` is for shared/example config.
 

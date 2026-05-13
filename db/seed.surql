@@ -1,3 +1,5 @@
+OPTION IMPORT;
+
 -- Areas
 CREATE area:camden CONTENT {
   name: "Camden",
