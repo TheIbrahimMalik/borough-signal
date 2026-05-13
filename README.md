@@ -226,6 +226,104 @@ npm run build
 
 ---
 
+## Deployment
+
+The simplest viable demo deployment path uses three managed services. Each piece is set up via its provider dashboard; no extra repo files are introduced.
+
+- **Database:** Surreal Cloud (managed SurrealDB)
+- **Backend:** Render Web Service (FastAPI)
+- **Frontend:** Vercel (Next.js)
+
+### 1. Database — Surreal Cloud
+
+1. Create a managed SurrealDB instance on Surreal Cloud suitable for demo use. Pick a region close to the backend region you plan to use on Render.
+2. Note the instance's connection URL (a `wss://...` endpoint) and the username/password it provides.
+3. Apply the schema and seed from this repo against the cloud instance using the same import flow as local setup — only `--endpoint`, `--username`, and `--password` change:
+
+   ```bash
+   surreal import \
+     --endpoint <surreal-cloud-url> \
+     --username <surreal-cloud-username> --password <surreal-cloud-password> \
+     --namespace boroughsignal --database main \
+     db/schema.surql
+
+   surreal import \
+     --endpoint <surreal-cloud-url> \
+     --username <surreal-cloud-username> --password <surreal-cloud-password> \
+     --namespace boroughsignal --database main \
+     db/seed.surql
+   ```
+
+   This is the same `surreal import` flow used in step 2 of local setup. The `OPTION IMPORT;` directive already present in `db/schema.surql` and `db/seed.surql` is required by SurrealDB 3.x's import endpoint.
+
+### 2. Backend — Render Web Service
+
+In the Render dashboard, create a new Web Service from this repo:
+
+- **Root directory:** `apps/api`
+- **Build command:** `pip install -r requirements.txt`
+- **Start command:** `python3 -m uvicorn main:app --host 0.0.0.0 --port $PORT`
+
+Set the following environment variables in the Render service settings.
+
+Required:
+
+| Key | Value |
+|---|---|
+| `SURREALDB_URL` | The `wss://...` URL from Surreal Cloud |
+| `SURREALDB_USERNAME` | Surreal Cloud username |
+| `SURREALDB_PASSWORD` | Surreal Cloud password |
+| `SURREALDB_NAMESPACE` | `boroughsignal` |
+| `SURREALDB_DATABASE` | `main` |
+
+Optional (LangSmith tracing):
+
+| Key | Value |
+|---|---|
+| `LANGSMITH_TRACING` | `true` |
+| `LANGSMITH_API_KEY` | Your LangSmith key |
+| `LANGSMITH_PROJECT` | `boroughsignal` |
+
+After Render finishes building and starts the service, note the public URL it assigns (e.g. `https://boroughsignal-api.onrender.com`). That URL is what the frontend needs.
+
+### 3. Frontend — Vercel
+
+In the Vercel dashboard, import this repo as a new project:
+
+- **Root directory:** `apps/web`
+
+Set one environment variable:
+
+| Key | Value |
+|---|---|
+| `NEXT_PUBLIC_API_BASE_URL` | The deployed Render backend URL (e.g. `https://boroughsignal-api.onrender.com`) |
+
+Because `NEXT_PUBLIC_API_BASE_URL` is read at build time by Next.js, **redeploy the frontend any time the backend URL changes**.
+
+### Smoke checks
+
+After all three pieces are deployed:
+
+```bash
+curl https://<render-backend-url>/health
+# → {"status":"ok"}
+
+curl https://<render-backend-url>/lookups/bootstrap | head
+# → non-empty areas, segments, issues
+```
+
+Then open the deployed Vercel URL in a browser and confirm, via DevTools → Network, that requests go to the deployed Render backend rather than `127.0.0.1`. Finally, run one end-to-end scenario in the UI (pick a borough, run a sample proposal) and confirm the result renders.
+
+### Honest trade-offs
+
+- Render free or low-cost plans may cold-start after idle, adding a few seconds to the first request after a quiet period.
+- `/simulate` is synchronous and can take a few seconds to return — there is no background queue.
+- CORS on the backend is permissive (`allow_origins=["*"]`) for demo simplicity.
+- LangSmith tracing is optional. The app runs correctly without it; setting the LangSmith env vars only adds run traces.
+- This path is intended as a credible demo deployment, not full production hardening (no auth, no rate limiting, no autoscaling tuning, no managed backups beyond what Surreal Cloud provides).
+
+---
+
 ## Limitations
 
 - This is a synthetic audience system, not real survey data
