@@ -16,14 +16,7 @@ Planning proposals are often evaluated with fragmented context and shallow stake
 
 ## What It Does
 
-A user selects a London borough and enters a planning proposal. The system then:
-
-1. Parses the proposal into structured features
-2. Retrieves borough, issue, and evidence context from SurrealDB
-3. Simulates how audience segments respond
-4. Stores the run, proposal, recommendation, and graph relationships in SurrealDB
-5. Generates an improved proposal version
-6. Reruns the simulation and compares before vs after
+A user picks a London borough and enters a planning proposal. BoroughSignal parses the proposal, retrieves borough and audience context from SurrealDB, simulates how each audience segment would react, persists the run, and can generate an improved version of the proposal so the original and improved can be compared side by side. The pipeline is broken down step by step under [How It Works](#how-it-works).
 
 ---
 
@@ -42,31 +35,54 @@ A user selects a London borough and enters a planning proposal. The system then:
 
 BoroughSignal uses a multi-step LangGraph workflow with persistent state in SurrealDB.
 
-### LangGraph Workflow
+### Workflow
 
-- `parse_proposal`
-- `retrieve_context`
-- `simulate_segments`
-- `persist_run`
+```mermaid
+flowchart LR
+    User([User]) -->|borough + proposal text| FE[Next.js frontend]
+    FE -->|POST /simulate| API[FastAPI backend]
+    API --> WF[LangGraph workflow]
+    WF --> N1[parse_proposal]
+    N1 --> N2[retrieve_context]
+    N2 --> N3[simulate_segments]
+    N3 --> N4[persist_run]
+    N2 <-->|read context| DB[(SurrealDB)]
+    N4 -->|write run| DB
+    WF -. optional traces .-> LS[(LangSmith)]
+    API -->|JSON result| FE
+```
 
-### Persistent Entities in SurrealDB
+The four workflow nodes run in order. Each is wrapped with `@traceable`, so when `LANGSMITH_API_KEY` is set the entire pipeline appears as a single trace in LangSmith.
 
-- `area`
-- `segment`
-- `issue`
-- `proposal`
-- `simulation_run`
-- `response`
-- `recommendation`
-- `evidence_doc`
+### Domain model
 
-### Graph Relationships
+```mermaid
+flowchart LR
+    Proposal -->|AFFECTS| Issue
+    Segment -->|CARES_ABOUT| Issue
+    Response -->|CITES| Evidence[evidence_doc]
+    Run[simulation_run] -. about .-> Proposal
+    Run -. contains .-> Response
+    Run -. contains .-> Recommendation
+    Run -. in .-> Area[area]
+```
 
-- `AFFECTS`
-- `CARES_ABOUT`
-- `CITES`
-- `LIVES_IN`
-- `BELONGS_TO`
+`AFFECTS`, `CARES_ABOUT`, `CITES`, `LIVES_IN`, and `BELONGS_TO` are SurrealDB `RELATE` edges. They make a single run explainable as a graph from proposal to evidence — see the worked example under [Graph traversal example](#graph-traversal-example).
+
+### Module map
+
+| Concept | File |
+|---|---|
+| FastAPI app, CORS, route includes, `/health` | `apps/api/main.py` |
+| Four workflow nodes (`parse_proposal_node`, `retrieve_context_node`, `simulate_segments_node`, `persist_run_node`) | `apps/api/graph/nodes.py` |
+| Extract structured proposal features from raw text | `apps/api/services/features.py` |
+| Map features and keywords to a small issue taxonomy | `apps/api/services/issues.py` |
+| Borough-vs-place mismatch detection (static `PLACE_TO_BOROUGH`) | `apps/api/services/geography.py` |
+| Segment scoring, area issue modifiers, stance mapping, run confidence | `apps/api/services/scoring.py` |
+| Build a single recommendation string from detected signals | `apps/api/services/recommendations.py` |
+| Write proposal, run, responses, recommendation and `RELATE` edges into SurrealDB | `apps/api/services/persistence.py` |
+| Typed client for `/lookups/bootstrap`, `/simulate`, `/simulate/compare`, `/runs/recent` | `apps/web/src/lib/api.ts` |
+| Single-page UI: borough picker, proposal input, results panel, compare view | `apps/web/src/app/page.tsx` |
 
 ---
 
@@ -123,6 +139,63 @@ Each run stores the proposal text, extracted features, detected issues, recommen
 ### 5. Comparison
 
 The app generates an improved proposal version and reruns the simulation to show how scores and sentiment change.
+
+---
+
+## Output interpretation
+
+BoroughSignal reports two different summary outputs: **overall sentiment** and **signal strength**.
+
+### Overall sentiment
+
+Overall sentiment is the aggregate direction of audience reaction: `support`, `mixed`, or `oppose`.
+
+The system first assigns each audience segment a numeric score, then maps that score to a stance:
+
+- `score >= 0.75` → `support`
+- `0.50 <= score < 0.75` → `mixed`
+- `score < 0.50` → `oppose`
+
+These segment stances are then aggregated using:
+
+- `support = +1`
+- `mixed = 0`
+- `oppose = -1`
+
+If the total is:
+
+- greater than `1` → overall sentiment = `support`
+- less than `-1` → overall sentiment = `oppose`
+- otherwise → overall sentiment = `mixed`
+
+### Signal strength
+
+Signal strength is a separate value in the range `0–1`. It is **not** a probability of support.
+
+Instead, it reflects how much structured signal the system had for the analysis, based on factors such as:
+
+- detected proposal features
+- detected issues
+- retrieved evidence
+- geography consistency
+
+This means a proposal can have **high signal strength** but still produce an **oppose** overall sentiment. In that case, the system is indicating that it found a strong structured basis for a negative result.
+
+### Signal strength calculation
+
+Signal strength is currently a heuristic score rather than a calibrated probability.
+
+It is calculated from:
+
+- a base score of `0.35`
+- `+ 0.08 × number of detected issues`
+- `+ 0.04 × number of active modeled features`
+- `+ 0.03 × evidence count`
+- `- 0.08` if a geography mismatch warning is triggered
+
+The result is then clamped to the range `0.20–0.95` and rounded to 2 decimal places.
+
+In practice, signal strength should be interpreted as a measure of **analysis richness and structured grounding**, not as a measure of whether a proposal is likely to be supported.
 
 ---
 
@@ -223,6 +296,18 @@ Frontend lint and production build (from `apps/web/`):
 npm run lint
 npm run build
 ```
+
+### Demo walkthrough
+
+With SurrealDB, the backend, and the frontend all running per the steps above:
+
+1. Open `http://localhost:3000`.
+2. Pick a sample scenario (e.g. *Southwark tower block trade-off*) and click **Simulate**.
+3. Review the result panel: detected issues, per-segment stance and rationale, cited evidence, and the recommendation.
+4. Click **Compare before / after**. Observe how segment scores and overall signal shift between the original and improved proposals.
+5. If `LANGSMITH_API_KEY` is set in `apps/api/.env`, open the LangSmith project to see the four workflow nodes for this run as a single trace.
+
+For a longer narrative version, see `docs/demo-script.md`.
 
 ---
 
@@ -327,6 +412,7 @@ Then open the deployed Vercel URL in a browser and confirm, via DevTools → Net
 ## Limitations
 
 - This is a synthetic audience system, not real survey data
+- Simulation logic is deterministic and parameterised; there is no LLM in the request path
 - Geographic validation is currently lightweight and curated, not full GIS-based
 - Proposal understanding is partly rule-based
 - Segment behaviour is modelled, not learned from real labelled response data
@@ -338,11 +424,11 @@ Then open the deployed Vercel URL in a browser and confirm, via DevTools → Net
 
 BoroughSignal aligns with the LangChain × SurrealDB hackathon goals by demonstrating:
 
-- LangGraph agent workflow orchestration
+- LangGraph workflow orchestration
 - Structured persistent memory in SurrealDB
 - Graph-style relationships between proposals, issues, segments, and evidence
 - Practical, real-world decision support
-- Observable workflow execution through LangSmith
+- Optional workflow tracing via LangSmith
 
 ---
 
@@ -384,63 +470,6 @@ Example idea:
 - young renters care about affordability
 - commuters care about transport
 - responses cite evidence documents linked to those issues
-
----
-
-## Output interpretation
-
-BoroughSignal reports two different summary outputs: **overall sentiment** and **signal strength**.
-
-### Overall sentiment
-
-Overall sentiment is the aggregate direction of audience reaction: `support`, `mixed`, or `oppose`.
-
-The system first assigns each audience segment a numeric score, then maps that score to a stance:
-
-- `score >= 0.75` → `support`
-- `0.50 <= score < 0.75` → `mixed`
-- `score < 0.50` → `oppose`
-
-These segment stances are then aggregated using:
-
-- `support = +1`
-- `mixed = 0`
-- `oppose = -1`
-
-If the total is:
-
-- greater than `1` → overall sentiment = `support`
-- less than `-1` → overall sentiment = `oppose`
-- otherwise → overall sentiment = `mixed`
-
-### Signal strength
-
-Signal strength is a separate value in the range `0–1`. It is **not** a probability of support.
-
-Instead, it reflects how much structured signal the system had for the analysis, based on factors such as:
-
-- detected proposal features
-- detected issues
-- retrieved evidence
-- geography consistency
-
-This means a proposal can have **high signal strength** but still produce an **oppose** overall sentiment. In that case, the system is indicating that it found a strong structured basis for a negative result.
-
-### Signal strength calculation
-
-Signal strength is currently a heuristic score rather than a calibrated probability.
-
-It is calculated from:
-
-- a base score of `0.35`
-- `+ 0.08 × number of detected issues`
-- `+ 0.04 × number of active modeled features`
-- `+ 0.03 × evidence count`
-- `- 0.08` if a geography mismatch warning is triggered
-
-The result is then clamped to the range `0.20–0.95` and rounded to 2 decimal places.
-
-In practice, signal strength should be interpreted as a measure of **analysis richness and structured grounding**, not as a measure of whether a proposal is likely to be supported.
 
 ---
 
